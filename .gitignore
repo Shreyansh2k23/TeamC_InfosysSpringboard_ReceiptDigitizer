@@ -1,0 +1,5 @@
+.streamlit/secrets.toml
+receipts.db
+__pycache__/
+*.pyc
+.env
