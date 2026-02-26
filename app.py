@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import pytesseract
 from groq import Groq
 import spacy
-# from dateutil import parser
+from dateutil import parser
 # from database.queries import fetch_all_receipts  # type: ignore
 # from ai.gemini_client import GeminiClient  # type: ignore
 # # from ui.styles import apply_global_styles
@@ -580,7 +580,9 @@ def regex_fallback(text):
     tip = re.search(r"(tip|gratuity)[^\d]*(\d+[\.,]\d{2})", text, re.I)
     
     # Look for date patterns
-    date_match = re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", text)
+    # date_match = re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", text)
+    date_match = re.search(r"\b\d{2}[-/]\d{2}[-/]\d{4}\b", text)
+    
     
     # Look for time patterns (HH:MM format, with optional AM/PM)
     time_match = re.search(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?\b", text)
@@ -698,7 +700,7 @@ def groq_validate_key(api_key: str):
         return False
 
     client = Groq(api_key=api_key)
-    models_to_try = ["llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]
+    models_to_try = ["meta-llama/llama-4-scout-17b-16e-instruct","llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]
 
     for model_name in models_to_try:
         try:
@@ -958,7 +960,7 @@ with tabs[0]:
             st.markdown("---")
             st.markdown(f"## 📄 {idx}. `{file_title}`")
 
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 # st.markdown('<div class="card">', unsafe_allow_html=True)
                 st.markdown("### 🖼️ Original Receipt")
@@ -974,7 +976,28 @@ with tabs[0]:
                 else:
                     st.info("Not processed yet.")
                 st.markdown("</div>", unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown("### 📦 Extracted JSON (Groq Output)")
 
+                if file_title in st.session_state.processed_outputs:
+                    extracted_data = st.session_state.processed_outputs[file_title]["data"]
+
+                    # Pretty display
+                    st.json(extracted_data)
+
+                    # Optional: show raw JSON string
+                    pretty_json = json.dumps(extracted_data, indent=4)
+
+                    st.download_button(
+                        label="⬇️ Download JSON",
+                        data=pretty_json,
+                        file_name=f"{file_title}_extracted.json",
+                        mime="application/json"
+                    )
+
+                else:
+                    st.info("Not processed yet.")
             # ================= PREPROCESS BUTTON =================
             process_key = f"process_{file_title}_{idx}"
             if st.button(f"🔍 Preprocess ({file_title})", key=process_key):
@@ -1785,6 +1808,25 @@ def apply_template_parsing(ocr_text: str, vendor: str, base_result: dict) -> dic
     
     return result
 
+def calculate_accuracy(result):
+    required_fields = ["merchant", "date", "total", "tax"]
+    score = 0
+
+    for field in required_fields:
+        value = result.get(field)
+
+        if field in ["total", "tax"]:
+            try:
+                if float(value) > 0:
+                    score += 1
+            except (TypeError, ValueError):
+                pass
+        else:
+            if value is not None and str(value).strip() != "":
+                score += 1
+
+    return round((score / len(required_fields)) * 100)
+
 
 with tabs[3]:
     # st.markdown("<div class='big-title'>🎯 Template-Based Parsing</div>", unsafe_allow_html=True)
@@ -1886,7 +1928,8 @@ with tabs[3]:
                 standard_result = process_receipt_pipeline(display_image, groq_key)
                 
                 # Simulate lower accuracy by potentially missing fields
-                standard_accuracy = 78
+                # standard_accuracy = 78
+                standard_accuracy = calculate_accuracy(standard_result)
                 
                 st.metric("Accuracy", f"{standard_accuracy}%", delta=None)
                 
@@ -1933,7 +1976,8 @@ with tabs[3]:
                 
                 # Apply template-based extraction
                 template_result = apply_template_parsing(ocr_text, detected_vendor, standard_result)
-                template_accuracy = 96
+                # template_accuracy = 96
+                template_accuracy = calculate_accuracy(template_result)
                 
                 st.metric("Accuracy", f"{template_accuracy}%", delta=f"+{template_accuracy - standard_accuracy}%")
                 
@@ -1974,6 +2018,7 @@ with tabs[3]:
         metric_col1, metric_col2, metric_col3 = st.columns(3)
         
         with metric_col1:
+            improvement = template_accuracy - standard_accuracy
             st.markdown("""<div style='text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                          color: white; padding: 20px; border-radius: 12px;'>
                          <h2 style='color: white; margin: 0;'>+18%</h2>
