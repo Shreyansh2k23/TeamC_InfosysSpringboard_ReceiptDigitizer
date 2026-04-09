@@ -156,11 +156,11 @@ http://localhost:8501
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Authors
 ### Infosys Springboard Project – Team C
 - Shreyansh Gupta
 - Prajanashree
-- Prasula Nikhileshwar Reddy
+- Pasula Nikhileshwar Reddy
 - Majji Meghana
 - Vanguri Madhulika
 
